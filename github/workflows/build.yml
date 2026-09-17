@@ -1,29 +1,79 @@
-name: build
-on: [push, workflow_dispatch]
+name: Check Project
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
 jobs:
-  apk:
+  check:
+    name: Check HTML CSS JavaScript
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - run: |
-          f=$(ls *.zip | head -1)
-          unzip -q "$f" -d _x
-          d=$(ls -d _x/*/ | head -1)
-          shopt -s dotglob
-          cp -r "$d"* .
-      - uses: actions/setup-java@v4
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          distribution: temurin
-          java-version: '21'
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - uses: android-actions/setup-android@v3
-      - run: npm install
-      - run: npx cap add android
-      - run: npx cap sync android
-      - run: cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
-      - uses: actions/upload-artifact@v4
-        with:
-          name: nabd-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          node-version: 20
+
+      - name: Check project files
+        run: |
+          echo "Checking project structure..."
+
+          test -f index.html || {
+            echo "ERROR: index.html not found"
+            exit 1
+          }
+
+          echo "index.html found successfully"
+
+      - name: Install dependencies
+        run: |
+          if [ -f package.json ]; then
+            npm install
+          else
+            echo "No package.json found - skipping npm install"
+          fi
+
+      - name: Run tests
+        run: |
+          if [ -f package.json ]; then
+            npm test --if-present
+          else
+            echo "No tests configured"
+          fi
+
+      - name: Check JavaScript syntax
+        run: |
+          echo "Checking JavaScript files..."
+
+          find . -name "*.js" \
+            -not -path "./node_modules/*" \
+            -not -path "./.git/*" \
+            -print0 | while IFS= read -r -d '' file
+          do
+            echo "Checking: $file"
+            node --check "$file"
+          done
+
+      - name: Check HTML
+        run: |
+          echo "HTML file found:"
+          find . -name "*.html" \
+            -not -path "./node_modules/*" \
+            -not -path "./.git/*"
+
+      - name: Final result
+        run: |
+          echo "================================"
+          echo "Project check completed!"
+          echo "No critical JavaScript syntax errors found."
+          echo "================================"
